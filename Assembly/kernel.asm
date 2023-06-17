@@ -27,32 +27,32 @@ extern handle_keyboard_interrupt
 ;read_from_disk:
 ;	pusha
 ;	push dx
-TimerIRQ:
-	push eax
-	mov eax, [esp + 4]
-	test eax, eax
-	jz TimerDone
-	dec eax
-	mov [esp + 4], eax
-TimerDone:
-	pop eax
-	iretd
-cmos_read:
-	cli
-	mov al, [esp + 4]
-	out 0x70,al
-	in al,0x71
-	sti
-	mov [esp + 4 + 4],al
-	ret
-cmos_write:
-	cli
-	mov al, [esp + 4]
-	out 0x70, al
-	mov al, [esp + 4 + 4]
-	out 0x71,al
-	sti
-	ret
+;TimerIRQ:
+;	push eax
+;	mov eax, [esp + 4]
+;	test eax, eax
+;	jz TimerDone
+;	dec eax
+;	mov [esp + 4], eax
+;TimerDone:
+;	pop eax
+;	iretd
+;cmos_read:
+;	cli
+;	mov al, [esp + 4]
+;	out 0x70,al
+;	in al,0x71
+;	sti
+;	mov [esp + 4 + 4],al
+;	ret
+;cmos_write:
+;	cli
+;	mov al, [esp + 4]
+;	out 0x70, al
+;	mov al, [esp + 4 + 4]
+;	out 0x71,al
+;	sti
+;	ret
 print_char_with_asm:
 	mov eax, [esp + 4 + 4]
 	mov edx, 80
