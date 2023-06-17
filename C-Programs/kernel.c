@@ -22,6 +22,11 @@
 //#include "disk.h"
 #include <stddef.h>
 
+struct IDT_pointer {
+	unsigned short limit;
+	unsigned int base;
+} __attribute__((packed));
+
 extern void print_char_with_asm(char c, int row, int col);
 extern void load_gdt();
 extern void keyboard_handler();
@@ -37,11 +42,6 @@ char* terminal_buffer = (char*)0xb8000;
 uint8_t buffer_position = 0;
 
 // IDT (from: https://www.youtube.com/watch?v=YtnNX074jMU&list=PL3Kz_hCNpKSTFCTJtP4-9mkYDVM7rAprW&index=12)
-
-struct IDT_pointer {
-	unsigned short limit;
-	unsigned int base;
-} __attribute__((packed));
 
 struct IDT_entry {
 	unsigned short offset_lowerbits;
