@@ -6,7 +6,7 @@ section .multiboot
 
 section .text
 
-%include "gdt.asm"
+%include "Assembly/gdt.asm"
 
 global _start
 global load_gdt
