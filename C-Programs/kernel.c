@@ -27,7 +27,7 @@ extern void load_gdt();
 extern void keyboard_handler();
 extern char ioport_in(unsigned short port);
 extern void ioport_out(unsigned short port, unsigned char data);
-extern void load_idt(unsigned int* idt_address);
+extern void load_idt(struct IDT_pointer* idt_address);
 extern void enable_interrupts();
 extern void cmos_read(unsigned char index, unsigned char tvalue);
 extern void cmos_write(unsigned char index, unsigned char tvalue);
