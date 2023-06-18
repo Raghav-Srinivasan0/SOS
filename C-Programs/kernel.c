@@ -50,6 +50,8 @@ extern void TimerIRQ(uint32_t countdown);
 
 char* terminal_buffer = (char*)0xb8000;
 uint8_t buffer_position = 0;
+uint8_t x = 0;
+uint8_t y = 0;
 
 struct IDT_entry IDT[IDT_SIZE];
 
@@ -100,6 +102,53 @@ void kb_init()
 	outPortB(PIC1_DATA_PORT, 0xFD);
 }
 
+char digitToChar(uint8_t digit)
+{
+	return (char)digit;
+}
+
+uint16_t color(uint8_t foreground, uint8_t background)
+{
+	return (uint16_t)foreground | (uint16_t)background << 8;
+}
+
+#define MAX 100
+  
+// Function to print the digit of
+// number N
+void printDigit(int N, uint8_t initPos, uint16_t c)
+{
+    // To store the digit
+    // of the number N
+    int arr[MAX];
+    int i = 0;
+    int j, r;
+  
+    // Till N becomes 0
+    while (N != 0) {
+  
+        // Extract the last digit of N
+        r = N % 10;
+  
+        // Put the digit in arr[]
+        arr[i] = r;
+        i++;
+  
+        // Update N to N/10 to extract
+        // next last digit
+        N = N / 10;
+    }
+  
+    // Print the digit of N by traversing
+    // arr[] reverse
+    terminal_buffer[initPos] = digitToChar(arr[0]+48);
+	terminal_buffer[initPos+1] = (char)c;
+	terminal_buffer[initPos+2] = digitToChar(arr[1]+48);
+	terminal_buffer[initPos+3] = (char)c;
+	terminal_buffer[initPos+4] = digitToChar(arr[2]+48);
+	terminal_buffer[initPos+5] = (char)c;
+}
+
 /* Printchar implementation */
 
 void printchar(char string, uint16_t c)
@@ -107,8 +156,15 @@ void printchar(char string, uint16_t c)
     terminal_buffer[buffer_position] = string;
     terminal_buffer[buffer_position+1] = (char)c;
     buffer_position+=2;
+	x = buffer_position % VGA_WIDTH*2;
+	y = (buffer_position - x) / VGA_WIDTH*2;
+	terminal_buffer[0] = 'x';
+	terminal_buffer[1] = ':';
+	printDigit(x,2,color(11,8));
+	terminal_buffer[VGA_WIDTH*2] = 'y';
+	terminal_buffer[VGA_WIDTH*2+1] = ':';
+	printDigit(y,VGA_WIDTH*2+2,color(12,8));
 }
-
 
 void handle_keyboard_interrupt()
 {
@@ -129,15 +185,10 @@ void handle_keyboard_interrupt()
 
 // VGA Graphics TODO: Fix problem of seeing gnu version in VGA. See myos.bin
 
-uint16_t color(uint8_t foreground, uint8_t background)
-{
-	return (uint16_t)foreground | (uint16_t)background << 8;
-}
-
 void init_terminal(uint16_t c)
 {
 	uint16_t i;
-	for(i = 0; i<VGA_WIDTH*VGA_HEIGHT; i++)
+	for(i = 0; i<VGA_WIDTH*VGA_HEIGHT*2; i++)
 	{
 		terminal_buffer[2*i] = ' ';
 		terminal_buffer[2*i + 1] = (char)c;
@@ -145,6 +196,8 @@ void init_terminal(uint16_t c)
 }
 
 /* Printf implementation */
+
+// TODO: Fix the fact that only 130 characters can be printed to the screen before the cursor goes to the beginning
 
 void printf(char* string, uint16_t c)
 {
@@ -165,17 +218,17 @@ void scanf()
 	scanf_result = "";
 	uint8_t i;
 
-	for(i = 0; i<(buffer_position%VGA_WIDTH); i++)
+	for(i = 0; i<(buffer_position%(VGA_WIDTH*2)); i++)
 	{
 		if(i%2==0)
-			scanf_result[i/2] = terminal_buffer[buffer_position - buffer_position%VGA_WIDTH+i];
+			scanf_result[i/2] = terminal_buffer[buffer_position - buffer_position%(VGA_WIDTH*2)+i];
 	}
 }
 
 void kernel_main(void)
 {
 	//beep(440,1000);
-	init_terminal(color(10,2));
+	init_terminal(color(10,3));
 	printf("Hello World",color(11,8));
 	init_idt();
 	kb_init();
