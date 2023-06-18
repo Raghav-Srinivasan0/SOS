@@ -1,1 +1,5 @@
 myos.iso
+Objects\boot.o 
+Objects\kernel.o 
+Objects\myos.bin 
+isodir\myos.bin
