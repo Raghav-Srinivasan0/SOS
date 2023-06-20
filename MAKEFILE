@@ -1,8 +1,0 @@
-Objects\myos.bin: C-Programs\kernel.c C-Programs\keyboard_map.h Assembly\kernel.asm 
-	nasm -f elf32 Assembly\kernel.asm -o Objects\boot.o
-	gcc -m32 -ffreestanding -c C-Programs\kernel.c Objects\kernel.o
-	ld -m elf_i386 -T Linker\linker.ld -o Objects\myos.bin Objects\boot.o Objects\kernel.o
-myos.iso: myos.bin
-	cp Objects\myos.bin isodir/boot/myos.bin
-	cp grub.cfg isodir/boot/grub/grub.cfg
-	grub-mkrescue -o myos.iso isodir
