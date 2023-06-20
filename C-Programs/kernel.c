@@ -22,6 +22,19 @@
 //#include "disk.h"
 #include <stddef.h>
 
+void println(char* string);
+void print(char* string);
+void safe_println(char* string, int len);
+void safe_print(char* string, int len);
+void printchar(char c);
+void printchar_at(char c, int row, int col);
+extern void print_char_with_asm(char c, int row, int col);
+void clear_screen();
+void print_prompt();
+void print_message();
+void newline();
+void backspace();
+
 // IDT (from: https://www.youtube.com/watch?v=YtnNX074jMU&list=PL3Kz_hCNpKSTFCTJtP4-9mkYDVM7rAprW&index=12)
 
 struct IDT_pointer {
@@ -47,11 +60,6 @@ extern void enable_interrupts();
 extern void cmos_read(unsigned char index, unsigned char tvalue);
 extern void cmos_write(unsigned char index, unsigned char tvalue);
 extern void TimerIRQ(uint32_t countdown);
-
-char* terminal_buffer = (char*)0xb8000;
-uint8_t buffer_position = 0;
-uint8_t x = 0;
-uint8_t y = 0;
 
 struct IDT_entry IDT[IDT_SIZE];
 
@@ -112,58 +120,47 @@ uint16_t color(uint8_t foreground, uint8_t background)
 	return (uint16_t)foreground | (uint16_t)background << 8;
 }
 
-#define MAX 100
-  
-// Function to print the digit of
-// number N
-void printDigit(int N, uint8_t initPos, uint16_t c)
-{
-    // To store the digit
-    // of the number N
-    int arr[MAX];
-    int i = 0;
-    int j, r;
-  
-    // Till N becomes 0
-    while (N != 0) {
-  
-        // Extract the last digit of N
-        r = N % 10;
-  
-        // Put the digit in arr[]
-        arr[i] = r;
-        i++;
-  
-        // Update N to N/10 to extract
-        // next last digit
-        N = N / 10;
-    }
-  
-    // Print the digit of N by traversing
-    // arr[] reverse
-    terminal_buffer[initPos] = digitToChar(arr[0]+48);
-	terminal_buffer[initPos+1] = (char)c;
-	terminal_buffer[initPos+2] = digitToChar(arr[1]+48);
-	terminal_buffer[initPos+3] = (char)c;
-	terminal_buffer[initPos+4] = digitToChar(arr[2]+48);
-	terminal_buffer[initPos+5] = (char)c;
-}
-
 /* Printchar implementation */
 
-void printchar(char string, uint16_t c)
-{
-    terminal_buffer[buffer_position] = string;
-    terminal_buffer[buffer_position+1] = (char)c;
-    buffer_position+=2;
-	x = buffer_position % VGA_WIDTH*2;
-	y = (buffer_position - x) / VGA_WIDTH*2;
-	terminal_buffer[0] = 'x';
-	terminal_buffer[1] = ':';
-	printDigit(x,2,color(11,8));
-	terminal_buffer[VGA_WIDTH*2] = 'y';
-	terminal_buffer[VGA_WIDTH*2+1] = ':';
-	printDigit(y,VGA_WIDTH*2+2,color(12,8));
+/* Printf implementation */
+
+// TODO: Fix the fact that only 130 characters can be printed to the screen before the cursor goes to the beginning
+
+int cursor_row = 0;
+int cursor_col = 0;
+
+void printchar(char c) {
+    printchar_at(c, cursor_row, cursor_col++);
+    if (cursor_col >= VGA_WIDTH) {
+        cursor_col = cursor_col % VGA_WIDTH;
+        cursor_row++;
+    }
+}
+
+void printchar_at(char c, int row, int col) {
+	// OFFSET = (ROW * 80) + COL
+	char* offset = (char*) (0xb8000 + 2*((row * VGA_WIDTH) + col));
+	*offset = c;
+}
+
+void clear_screen() {
+	for (int i = 0; i < VGA_HEIGHT; i++) {
+		for (int j = 0; j < VGA_WIDTH; j++) {
+			printchar_at(' ', i, j);
+		}
+	}
+    cursor_row = 0;
+}
+
+void newline() {
+    cursor_row++;
+    cursor_col = 0;
+}
+
+void backspace() {
+    if (cursor_col > 6) {
+        print_char_with_asm(' ', cursor_row, --cursor_col);
+    }
 }
 
 void handle_keyboard_interrupt()
@@ -174,62 +171,27 @@ void handle_keyboard_interrupt()
 	{
 		unsigned char keycode = inPortB(KEYBOARD_DATA_PORT);
 		if (keycode < 0 || keycode >= 128) return;
+		if (keycode == 14)
+		{
+			backspace();
+			return;
+		}
 		if (keycode == 28)
 		{
-			buffer_position = (buffer_position+VGA_WIDTH*2)-(buffer_position%VGA_WIDTH*2);
+			newline();
+			return;
 		}
-		printchar(keyboard_map[keycode], 0x0F);
-	}
-}
-
-
-// VGA Graphics TODO: Fix problem of seeing gnu version in VGA. See myos.bin
-
-void init_terminal(uint16_t c)
-{
-	uint16_t i;
-	for(i = 0; i<VGA_WIDTH*VGA_HEIGHT*2; i++)
-	{
-		terminal_buffer[2*i] = ' ';
-		terminal_buffer[2*i + 1] = (char)c;
-	}
-}
-
-/* Printf implementation */
-
-// TODO: Fix the fact that only 130 characters can be printed to the screen before the cursor goes to the beginning
-
-void printf(char* string, uint16_t c)
-{
-	size_t len = 0;
-	while(string[len])
-	{
-		terminal_buffer[buffer_position] = string[len];
-		terminal_buffer[buffer_position+1] = (char)c;
-		buffer_position+=2;
-		len++;
-	}
-}
-
-char* scanf_result;
-
-void scanf()
-{
-	scanf_result = "";
-	uint8_t i;
-
-	for(i = 0; i<(buffer_position%(VGA_WIDTH*2)); i++)
-	{
-		if(i%2==0)
-			scanf_result[i/2] = terminal_buffer[buffer_position - buffer_position%(VGA_WIDTH*2)+i];
+		if (keycode == 42 || keycode == 54)
+		{
+			printchar((char)(((int)keyboard_map[keycode])-32));
+		}else{
+			printchar(keyboard_map[keycode]);
+		}
 	}
 }
 
 void kernel_main(void)
 {
-	//beep(440,1000);
-	init_terminal(color(10,3));
-	printf("Hello World",color(11,8));
 	init_idt();
 	kb_init();
 	enable_interrupts();
