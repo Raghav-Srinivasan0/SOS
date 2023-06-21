@@ -16,10 +16,11 @@ global ioport_in
 global ioport_out
 global enable_interrupts
 global print_char_with_asm
-;global read_from_disk
-global cmos_read
-global cmos_write
-global TimerIRQ
+
+global floppy_init
+global floppy_datarate
+global floppy_dir
+global floppy_fifo
 
 extern kernel_main
 extern handle_keyboard_interrupt
@@ -95,6 +96,35 @@ ioport_out:
 	mov edx, [esp + 4]
 	mov eax, [esp + 8]
 	out dx, al
+	ret
+
+floppy_init:
+	mov dx, 0x3f2
+	pusha
+	mov al, 11111001b
+	out dx, al
+	popa
+	ret
+
+floppy_datarate:
+	mov dx, 0x3f4
+	pusha 
+	mov eax, [esp + 4]
+	out dx, al 
+	popa 
+	ret 
+
+floppy_dir:
+	mov dx, 0x3f7
+	in al, dx 
+	ret
+
+floppy_fifo:
+	mov dx, 0x3f5
+	pusha
+	mov eax, [esp + 4]
+	out dx, al
+	popa
 	ret
 
 _start:

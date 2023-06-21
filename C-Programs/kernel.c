@@ -60,6 +60,10 @@ extern void enable_interrupts();
 extern void cmos_read(unsigned char index, unsigned char tvalue);
 extern void cmos_write(unsigned char index, unsigned char tvalue);
 extern void TimerIRQ(uint32_t countdown);
+extern void floppy_init();
+extern void floppy_datarate(uint8_t datarate);
+extern char floppy_dir();
+extern void floppy_fifo(uint8_t command);
 
 struct IDT_entry IDT[IDT_SIZE];
 
