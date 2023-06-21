@@ -67,6 +67,7 @@ print_char_with_asm:
 	mov eax, [esp + 4] 		; char c
 	mov [edx], al
 	ret
+
 load_gdt:
 	lgdt [gdt_descriptor]
 	ret

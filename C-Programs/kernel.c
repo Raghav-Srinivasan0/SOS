@@ -17,12 +17,29 @@
 #define KERNEL_CODE_SEGMENT_OFFSET 0x8
 #define IDT_INTERRUPT_GATE_32BIT 0x8e
 
+#define BLACK 0
+#define BLUE 1
+#define GREEN 2
+#define CYAN 3
+#define RED 4
+#define MAGENTA 5
+#define BROWN 6
+#define LIGHTGRAY 7
+#define DARKGRAY 8
+#define LIGHTBLUE 9
+#define LIGHTGREEN 10
+#define LIGHTCYAN 11
+#define LIGHTRED 12
+#define LIGHTMAGENTA 13
+#define YELLOW 13
+#define WHITE 15
+
 #include <stdint.h>
 #include "keyboard_map.h"
 //#include "disk.h"
 #include <stddef.h>
+#include <stdbool.h>
 
-void println(char* string);
 void print(char* string);
 void safe_println(char* string, int len);
 void safe_print(char* string, int len);
@@ -132,6 +149,51 @@ uint16_t color(uint8_t foreground, uint8_t background)
 
 int cursor_row = 0;
 int cursor_col = 0;
+uint16_t currentColor = 0x0F;
+
+void clear_screen() {
+	for (int i = 0; i < VGA_HEIGHT; i++) {
+		for (int j = 0; j < VGA_WIDTH; j++) {
+			printchar_at(' ', i, j);
+		}
+	}
+    cursor_row = 0;
+}
+
+void enable_cursor(uint8_t cursor_start, uint8_t cursor_end)
+{
+	outPortB(0x3D4, 0x0A);
+	outPortB(0x3D5, (inPortB(0x3D5) & 0xC0) | cursor_start);
+ 
+	outPortB(0x3D4, 0x0B);
+	outPortB(0x3D5, (inPortB(0x3D5) & 0xE0) | cursor_end);
+}
+
+void disable_cursor()
+{
+	outPortB(0x3D4, 0x0A);
+	outPortB(0x3D5, 0x20);
+}
+
+void update_cursor(int x, int y)
+{
+	uint16_t pos = y * VGA_WIDTH + x;
+ 
+	outPortB(0x3D4, 0x0F);
+	outPortB(0x3D5, (uint8_t) (pos & 0xFF));
+	outPortB(0x3D4, 0x0E);
+	outPortB(0x3D5, (uint8_t) ((pos >> 8) & 0xFF));
+}
+
+uint16_t get_cursor_position(void)
+{
+    uint16_t pos = 0;
+    outPortB(0x3D4, 0x0F);
+    pos |= inPortB(0x3D5);
+    outPortB(0x3D4, 0x0E);
+    pos |= ((uint16_t)inPortB(0x3D5)) << 8;
+    return pos;
+}
 
 void printchar(char c) {
     printchar_at(c, cursor_row, cursor_col++);
@@ -145,26 +207,111 @@ void printchar_at(char c, int row, int col) {
 	// OFFSET = (ROW * 80) + COL
 	char* offset = (char*) (0xb8000 + 2*((row * VGA_WIDTH) + col));
 	*offset = c;
+	offset[1] = (char)currentColor;
+	update_cursor(col+1,row);
 }
 
-void clear_screen() {
-	for (int i = 0; i < VGA_HEIGHT; i++) {
-		for (int j = 0; j < VGA_WIDTH; j++) {
-			printchar_at(' ', i, j);
+char* readline(int row)
+{
+	char* result = (char*) (0xb8000 + 2*((row * VGA_WIDTH)));
+	return result;
+}
+
+void shiftUp()
+{
+	for (int i = 1; i<VGA_HEIGHT; i++)
+	{
+		char* line_data = readline(i);
+		for (int j = 0; j<VGA_WIDTH*2; j+=2)
+		{
+			printchar_at(line_data[j], i-1,j/2);
 		}
 	}
-    cursor_row = 0;
+	for (int j = 0; j<VGA_WIDTH*2; j+=2)
+	{
+		printchar_at(' ', VGA_HEIGHT-1,j/2);
+	}
 }
 
 void newline() {
-    cursor_row++;
+	if (cursor_row < VGA_HEIGHT-1)
+	{
+		cursor_row++;
+	}
+	else{
+		shiftUp();
+	}
     cursor_col = 0;
 }
 
+void println(char* line)
+{
+	int i = 0;
+	while (line[i]!='\0')
+	{
+		printchar(line[i]);
+		i++;
+	}
+	newline();
+}
+
+void print_init()
+{
+	println("                          ********   *******    ********              ");
+	println("                         **//////   **/////**  **//////               ");
+	println("                        /**        **     //**/**            Operating");
+	println("       Srinivasan       /*********/**      /**/*********              ");
+	println("                        ////////**/**      /**////////**              ");
+	println("                               /**//**      **        /**    System   ");
+	println("                         ********  //*******   ********               ");
+	println("                        ////////    ///////   ////////                ");
+}
+
 void backspace() {
-    if (cursor_col > 6) {
+    if (cursor_col > 0) {
         print_char_with_asm(' ', cursor_row, --cursor_col);
     }
+}
+
+void shell(char* linedata)
+{
+	if (linedata[0] == 'e' && linedata[2] == 'c' && linedata[4] == 'h' && linedata[6] == 'o' && linedata[8] == ' ')
+	{
+		currentColor = color(MAGENTA,BLACK);
+		for (int i = 10; i<VGA_WIDTH*2; i+=2)
+		{
+			printchar(linedata[i]);
+		}
+		for (int i = 0; i<4; i++)
+		{
+			printchar(' ');
+		}
+		newline();
+		currentColor = color(WHITE,BLACK);
+		return;
+	}
+	else if (linedata[0] == 'l' && linedata[2] == 'i' && linedata[4] == 'n' && linedata[6] == 'e' && linedata[8] == ' ')
+	{
+		char tensDigit = ' ';
+		char onesDigit = ' ';
+		if (linedata[12] != ' ')
+		{
+			onesDigit = linedata[12];
+			tensDigit = linedata[10];
+		}else{
+			onesDigit = linedata[10];
+			tensDigit = '0';
+		}
+		int number = ((int)tensDigit - 48) * 10 + ((int)onesDigit - 48);
+		char* linedata = readline(number);
+		currentColor = color(MAGENTA,BLACK);
+		for (int i = 0; i<VGA_WIDTH*2; i+=2)
+		{
+			printchar(linedata[i]);
+		}
+		currentColor = color(WHITE,BLACK);
+		return;
+	}
 }
 
 void handle_keyboard_interrupt()
@@ -177,16 +324,22 @@ void handle_keyboard_interrupt()
 		if (keycode < 0 || keycode >= 128) return;
 		if (keycode == 14)
 		{
+			//printchar_at('b',10,10);
 			backspace();
 			return;
 		}
 		if (keycode == 28)
 		{
+			//printchar_at('e',10,10);
+			char* line_data = readline(cursor_row);
+			/* Implement Shell Commands Here */
 			newline();
+			shell(line_data);
 			return;
 		}
 		if (keycode == 42 || keycode == 54)
 		{
+			//printchar_at('s',10,10);
 			printchar((char)(((int)keyboard_map[keycode])-32));
 		}else{
 			printchar(keyboard_map[keycode]);
@@ -196,6 +349,10 @@ void handle_keyboard_interrupt()
 
 void kernel_main(void)
 {
+	enable_cursor(0,15);
+	currentColor = color(LIGHTGREEN,CYAN);
+	print_init();
+	currentColor = color(WHITE,BLACK);
 	init_idt();
 	kb_init();
 	enable_interrupts();
