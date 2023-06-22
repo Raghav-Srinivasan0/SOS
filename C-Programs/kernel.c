@@ -334,6 +334,7 @@ uint16_t color(uint8_t foreground, uint8_t background)
 int cursor_row = 0;
 int cursor_col = 0;
 uint16_t currentColor = 0x0F;
+uint16_t defaultColor = 0x0F;
 
 void clear_screen() {
 	for (int i = 0; i < VGA_HEIGHT; i++) {
@@ -912,14 +913,14 @@ void multiboot_init(multiboot_info_t* mbd, uint32_t magic)
     if(magic != MULTIBOOT_BOOTLOADER_MAGIC) {
 		currentColor = color(RED,BLACK);
         println("invalid magic number!");
-		currentColor = color(WHITE,BLACK);
+		currentColor = defaultColor;
     }
  
     /* Check bit 6 to see if we have a valid memory map */
     if(!(mbd->flags >> 6 & 0x1)) {
 		currentColor = color(RED,BLACK);
         println("invalid memory map given by GRUB bootloader");
-		currentColor = color(WHITE,BLACK);
+		currentColor = defaultColor;
     }
  
     /* Loop through the memory map and display the values */
@@ -972,7 +973,7 @@ void shell(char* linedata)
 			printchar(' ');
 		}
 		newline();
-		currentColor = color(WHITE,BLACK);
+		currentColor = defaultColor;
 		return;
 	}
 	else if (linedata[0] == 'l' && linedata[2] == 'i' && linedata[4] == 'n' && linedata[6] == 'e' && linedata[8] == ' ')
@@ -994,9 +995,37 @@ void shell(char* linedata)
 		{
 			printchar(linedata[i]);
 		}
-		currentColor = color(WHITE,BLACK);
+		currentColor = defaultColor;
 		return;
 	}
+
+    /* broken */
+    else if (linedata[0] == 'c' && linedata[2] == 'o' && linedata[4] == 'l' && linedata[6] == 'o' && linedata[8] == ' ')
+	{
+        char tensDigit_1 = ' ';
+		char onesDigit_1 = ' ';
+		if (linedata[14] != ' ')
+		{
+			onesDigit_1 = linedata[14];
+			tensDigit_1 = linedata[12];
+		}else{
+			onesDigit_1 = linedata[12];
+			tensDigit_1 = '0';
+		}
+		int number_1 = ((int)tensDigit_1 - 48) * 10 + ((int)onesDigit_1 - 48);
+        char tensDigit_2 = ' ';
+		char onesDigit_2 = ' ';
+		if (linedata[20] != ' ')
+		{
+			onesDigit_2 = linedata[20];
+			tensDigit_2 = linedata[18];
+		}else{
+			onesDigit_2 = linedata[18];
+			tensDigit_2 = '0';
+		}
+		int number_2 = ((int)tensDigit_2 - 48) * 10 + ((int)onesDigit_2 - 48);
+        defaultColor = color(number_1,number_2);
+    }
 }
 
 void handle_keyboard_interrupt()
@@ -1038,7 +1067,7 @@ void kernel_main(multiboot_info_t* mbd, uint32_t magic)
 	enable_cursor(0,15);
 	currentColor = color(LIGHTGREEN,CYAN);
 	print_init();
-	currentColor = color(WHITE,BLACK);
+	currentColor = defaultColor;
 	multiboot_init(mbd,magic);
 	init_idt();
 	kb_init();
