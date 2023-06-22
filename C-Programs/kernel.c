@@ -96,6 +96,55 @@ void outPortB (unsigned short _port, unsigned char _data)
 	ioport_out(_port,_data);
 }
 
+/* mem stuff */
+
+void* memmove(void* dstptr, const void* srcptr, size_t size) {
+	unsigned char* dst = (unsigned char*) dstptr;
+	const unsigned char* src = (const unsigned char*) srcptr;
+	if (dst < src) {
+		for (size_t i = 0; i < size; i++)
+			dst[i] = src[i];
+	} else {
+		for (size_t i = size; i != 0; i--)
+			dst[i-1] = src[i-1];
+	}
+	return dstptr;
+}
+
+size_t strlen(const char* str) {
+	size_t len = 0;
+	while (str[len])
+		len++;
+	return len;
+}
+
+int memcmp(const void* aptr, const void* bptr, size_t size) {
+	const unsigned char* a = (const unsigned char*) aptr;
+	const unsigned char* b = (const unsigned char*) bptr;
+	for (size_t i = 0; i < size; i++) {
+		if (a[i] < b[i])
+			return -1;
+		else if (b[i] < a[i])
+			return 1;
+	}
+	return 0;
+}
+
+void* memset(void* bufptr, int value, size_t size) {
+	unsigned char* buf = (unsigned char*) bufptr;
+	for (size_t i = 0; i < size; i++)
+		buf[i] = (unsigned char) value;
+	return bufptr;
+}
+
+void* memcpy(void* restrict dstptr, const void* restrict srcptr, size_t size) {
+	unsigned char* dst = (unsigned char*) dstptr;
+	const unsigned char* src = (const unsigned char*) srcptr;
+	for (size_t i = 0; i < size; i++)
+		dst[i] = src[i];
+	return dstptr;
+}
+
 void init_idt()
 {
 	unsigned int offset = (unsigned int)keyboard_handler;
@@ -208,7 +257,6 @@ void printchar_at(char c, int row, int col) {
 	char* offset = (char*) (0xb8000 + 2*((row * VGA_WIDTH) + col));
 	*offset = c;
 	offset[1] = (char)currentColor;
-	update_cursor(col+1,row);
 }
 
 char* readline(int row)
@@ -270,7 +318,12 @@ void print_init()
 void backspace() {
     if (cursor_col > 0) {
         print_char_with_asm(' ', cursor_row, --cursor_col);
-    }
+		update_cursor(cursor_col,cursor_row);
+    }else if(cursor_row > 0) {
+		cursor_row--;
+		cursor_col = VGA_WIDTH;
+		update_cursor(cursor_col,cursor_row);
+	}
 }
 
 void shell(char* linedata)
@@ -344,6 +397,7 @@ void handle_keyboard_interrupt()
 		}else{
 			printchar(keyboard_map[keycode]);
 		}
+		update_cursor(cursor_col,cursor_row);
 	}
 }
 
