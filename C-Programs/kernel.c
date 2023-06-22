@@ -37,8 +37,11 @@
 #include <stdint.h>
 #include "keyboard_map.h"
 //#include "disk.h"
+
 #include <stddef.h>
 #include <stdbool.h>
+#include <stdarg.h>
+#include "multiboot.h"
 
 void print(char* string);
 void safe_println(char* string, int len);
@@ -96,6 +99,141 @@ void outPortB (unsigned short _port, unsigned char _data)
 	ioport_out(_port,_data);
 }
 
+/* string stuff */
+char *strcpy(char *s1, const char *s2)
+{
+    char *s1_p = s1;
+    while (*s1++ = *s2++)
+      ;
+    return s1_p;
+}
+
+size_t strlen(const char *s) {
+    size_t cnt = 0;
+    while (*s ++ != '\0') {
+        cnt ++;
+    }
+    return cnt;
+}
+
+size_t strnlen(const char *s, size_t len) {
+    size_t cnt = 0;
+    while (cnt < len && *s ++ != '\0') {
+        cnt ++;
+    }
+    return cnt;
+}
+
+char * strcat(char *dst, const char *src) {
+    return strcpy(dst + strlen(dst), src);
+}
+
+char * strncpy(char *dst, const char *src, size_t len) {
+    char *p = dst;
+    while (len > 0) {
+        if ((*p = *src) != '\0') {
+            src ++;
+        }
+        p ++, len --;
+    }
+    return dst;
+}
+
+int strcmp(const char *s1, const char *s2) {
+#ifdef __HAVE_ARCH_STRCMP
+    return __strcmp(s1, s2);
+#else
+    while (*s1 != '\0' && *s1 == *s2) {
+        s1 ++, s2 ++;
+    }
+    return (int)((unsigned char)*s1 - (unsigned char)*s2);
+#endif /* __HAVE_ARCH_STRCMP */
+}
+
+int strncmp(const char *s1, const char *s2, size_t n) {
+    while (n > 0 && *s1 != '\0' && *s1 == *s2) {
+        n --, s1 ++, s2 ++;
+    }
+    return (n == 0) ? 0 : (int)((unsigned char)*s1 - (unsigned char)*s2);
+}
+
+char * strchr(const char *s, char c) {
+    while (*s != '\0') {
+        if (*s == c) {
+            return (char *)s;
+        }
+        s ++;
+    }
+    return NULL;
+}
+
+char * strfind(const char *s, char c) {
+    while (*s != '\0') {
+        if (*s == c) {
+            break;
+        }
+        s ++;
+    }
+    return (char *)s;
+}
+
+long strtol(const char *s, char **endptr, int base) {
+    int neg = 0;
+    long val = 0;
+
+    // gobble initial whitespace
+    while (*s == ' ' || *s == '\t') {
+        s ++;
+    }
+
+    // plus/minus sign
+    if (*s == '+') {
+        s ++;
+    }
+    else if (*s == '-') {
+        s ++, neg = 1;
+    }
+
+    // hex or octal base prefix
+    if ((base == 0 || base == 16) && (s[0] == '0' && s[1] == 'x')) {
+        s += 2, base = 16;
+    }
+    else if (base == 0 && s[0] == '0') {
+        s ++, base = 8;
+    }
+    else if (base == 0) {
+        base = 10;
+    }
+
+    // digits
+    while (1) {
+        int dig;
+
+        if (*s >= '0' && *s <= '9') {
+            dig = *s - '0';
+        }
+        else if (*s >= 'a' && *s <= 'z') {
+            dig = *s - 'a' + 10;
+        }
+        else if (*s >= 'A' && *s <= 'Z') {
+            dig = *s - 'A' + 10;
+        }
+        else {
+            break;
+        }
+        if (dig >= base) {
+            break;
+        }
+        s ++, val = (val * base) + dig;
+        // we don't properly detect overflow!
+    }
+
+    if (endptr) {
+        *endptr = (char *) s;
+    }
+    return (neg ? -val : val);
+}
+
 /* mem stuff */
 
 void* memmove(void* dstptr, const void* srcptr, size_t size) {
@@ -109,13 +247,6 @@ void* memmove(void* dstptr, const void* srcptr, size_t size) {
 			dst[i-1] = src[i-1];
 	}
 	return dstptr;
-}
-
-size_t strlen(const char* str) {
-	size_t len = 0;
-	while (str[len])
-		len++;
-	return len;
 }
 
 int memcmp(const void* aptr, const void* bptr, size_t size) {
@@ -143,6 +274,10 @@ void* memcpy(void* restrict dstptr, const void* restrict srcptr, size_t size) {
 	for (size_t i = 0; i < size; i++)
 		dst[i] = src[i];
 	return dstptr;
+}
+
+bool isdigit(char c) {
+  return c >= '0' && c <= '9';
 }
 
 void init_idt()
@@ -303,6 +438,503 @@ void println(char* line)
 	newline();
 }
 
+/*
+char* __int_str(intmax_t i, char b[], int base, bool plusSignIfNeeded, bool spaceSignIfNeeded,
+                int paddingNo, bool justify, bool zeroPad) {
+ 
+    char digit[32] = {0};
+    memset(digit, 0, 32);
+    strcpy(digit, "0123456789");
+ 
+    if (base == 16) {
+        strcat(digit, "ABCDEF");
+    } else if (base == 17) {
+        strcat(digit, "abcdef");
+        base = 16;
+    }
+ 
+    char* p = b;
+    if (i < 0) {
+        *p++ = '-';
+        i *= -1;
+    } else if (plusSignIfNeeded) {
+        *p++ = '+';
+    } else if (!plusSignIfNeeded && spaceSignIfNeeded) {
+        *p++ = ' ';
+    }
+ 
+    intmax_t shifter = i;
+    do {
+        ++p;
+        shifter = shifter / base;
+    } while (shifter);
+ 
+    *p = '\0';
+    do {
+        *--p = digit[i % base];
+        i = i / base;
+    } while (i);
+ 
+    int padding = paddingNo - (int)strlen(b);
+    if (padding < 0) padding = 0;
+ 
+    if (justify) {
+        while (padding--) {
+            if (zeroPad) {
+                b[strlen(b)] = '0';
+            } else {
+                b[strlen(b)] = ' ';
+            }
+        }
+ 
+    } else {
+        char a[256] = {0};
+        while (padding--) {
+            if (zeroPad) {
+                a[strlen(a)] = '0';
+            } else {
+                a[strlen(a)] = ' ';
+            }
+        }
+        strcat(a, b);
+        strcpy(b, a);
+    }
+ 
+    return b;
+}
+*/ 
+void displayCharacter(char c, int* a) {
+    printchar(c);
+    *a += 1;
+}
+ 
+void displayString(char* c, int* a) {
+    for (int i = 0; c[i]; ++i) {
+        displayCharacter(c[i], a);
+    }
+}
+ 
+int vprintf (const char* format, va_list list)
+{
+    int chars        = 0;
+    char intStrBuffer[256] = {0};
+ 
+    for (int i = 0; format[i]; ++i) {
+ 
+        char specifier   = '\0';
+        char length      = '\0';
+ 
+        int  lengthSpec  = 0; 
+        int  precSpec    = 0;
+        bool leftJustify = false;
+        bool zeroPad     = false;
+        bool spaceNoSign = false;
+        bool altForm     = false;
+        bool plusSign    = false;
+        bool emode       = false;
+        int  expo        = 0;
+ 
+        if (format[i] == '%') {
+            ++i;
+ 
+            bool extBreak = false;
+            while (1) {
+ 
+                switch (format[i]) {
+                    case '-':
+                        leftJustify = true;
+                        ++i;
+                        break;
+ 
+                    case '+':
+                        plusSign = true;
+                        ++i;
+                        break;
+ 
+                    case '#':
+                        altForm = true;
+                        ++i;
+                        break;
+ 
+                    case ' ':
+                        spaceNoSign = true;
+                        ++i;
+                        break;
+ 
+                    case '0':
+                        zeroPad = true;
+                        ++i;
+                        break;
+ 
+                    default:
+                        extBreak = true;
+                        break;
+                }
+ 
+                if (extBreak) break;
+            }
+ 
+            while (isdigit(format[i])) {
+                lengthSpec *= 10;
+                lengthSpec += format[i] - 48;
+                ++i;
+            }
+ 
+            if (format[i] == '*') {
+                lengthSpec = va_arg(list, int);
+                ++i;
+            }
+ 
+            if (format[i] == '.') {
+                ++i;
+                while (isdigit(format[i])) {
+                    precSpec *= 10;
+                    precSpec += format[i] - 48;
+                    ++i;
+                }
+ 
+                if (format[i] == '*') {
+                    precSpec = va_arg(list, int);
+                    ++i;
+                }
+            } else {
+                precSpec = 6;
+            }
+ 
+            if (format[i] == 'h' || format[i] == 'l' || format[i] == 'j' ||
+                   format[i] == 'z' || format[i] == 't' || format[i] == 'L') {
+                length = format[i];
+                ++i;
+                if (format[i] == 'h') {
+                    length = 'H';
+                } else if (format[i] == 'l') {
+                    length = 'q';
+                    ++i;
+                }
+            }
+            specifier = format[i];
+ 
+            memset(intStrBuffer, 0, 256);
+ 
+            int base = 10;
+            if (specifier == 'o') {
+                base = 8;
+                specifier = 'u';
+                if (altForm) {
+                    displayString("0", &chars);
+                }
+            }
+            if (specifier == 'p') {
+                base = 16;
+                length = 'z';
+                specifier = 'u';
+            }
+            switch (specifier) {
+                case 'X':
+                    base = 16;
+                case 'x':
+                    base = base == 10 ? 17 : base;
+                    if (altForm) {
+                        displayString("0x", &chars);
+                    }
+ 
+                /*case 'u':
+                {
+                    switch (length) {
+                        case 0:
+                        {
+                            unsigned int integer = va_arg(list, unsigned int);
+                            __int_str(integer, intStrBuffer, base, plusSign, spaceNoSign, lengthSpec, leftJustify, zeroPad);
+                            displayString(intStrBuffer, &chars);
+                            break;
+                        }
+                        case 'H':
+                        {
+                            unsigned char integer = (unsigned char) va_arg(list, unsigned int);
+                            __int_str(integer, intStrBuffer, base, plusSign, spaceNoSign, lengthSpec, leftJustify, zeroPad);
+                            displayString(intStrBuffer, &chars);
+                            break;
+                        }
+                        case 'h':
+                        {
+                            unsigned short int integer = va_arg(list, unsigned int);
+                            __int_str(integer, intStrBuffer, base, plusSign, spaceNoSign, lengthSpec, leftJustify, zeroPad);
+                            displayString(intStrBuffer, &chars);
+                            break;
+                        }
+                        case 'l':
+                        {
+                            unsigned long integer = va_arg(list, unsigned long);
+                            __int_str(integer, intStrBuffer, base, plusSign, spaceNoSign, lengthSpec, leftJustify, zeroPad);
+                            displayString(intStrBuffer, &chars);
+                            break;
+                        }
+                        case 'q':
+                        {
+                            unsigned long long integer = va_arg(list, unsigned long long);
+                            __int_str(integer, intStrBuffer, base, plusSign, spaceNoSign, lengthSpec, leftJustify, zeroPad);
+                            displayString(intStrBuffer, &chars);
+                            break;
+                        }
+                        case 'j':
+                        {
+                            uintmax_t integer = va_arg(list, uintmax_t);
+                            __int_str(integer, intStrBuffer, base, plusSign, spaceNoSign, lengthSpec, leftJustify, zeroPad);
+                            displayString(intStrBuffer, &chars);
+                            break;
+                        }
+                        case 'z':
+                        {
+                            size_t integer = va_arg(list, size_t);
+                            __int_str(integer, intStrBuffer, base, plusSign, spaceNoSign, lengthSpec, leftJustify, zeroPad);
+                            displayString(intStrBuffer, &chars);
+                            break;
+                        }
+                        case 't':
+                        {
+                            ptrdiff_t integer = va_arg(list, ptrdiff_t);
+                            __int_str(integer, intStrBuffer, base, plusSign, spaceNoSign, lengthSpec, leftJustify, zeroPad);
+                            displayString(intStrBuffer, &chars);
+                            break;
+                        }
+                        default:
+                            break;
+                    }
+                    break;
+                }*/
+ 
+                case 'd':
+                /*case 'i':
+                {
+                    switch (length) {
+                    case 0:
+                    {
+                        int integer = va_arg(list, int);
+                        __int_str(integer, intStrBuffer, base, plusSign, spaceNoSign, lengthSpec, leftJustify, zeroPad);
+                        displayString(intStrBuffer, &chars);
+                        break;
+                    }
+                    case 'H':
+                    {
+                        signed char integer = (signed char) va_arg(list, int);
+                        __int_str(integer, intStrBuffer, base, plusSign, spaceNoSign, lengthSpec, leftJustify, zeroPad);
+                        displayString(intStrBuffer, &chars);
+                        break;
+                    }
+                    case 'h':
+                    {
+                        short int integer = va_arg(list, int);
+                        __int_str(integer, intStrBuffer, base, plusSign, spaceNoSign, lengthSpec, leftJustify, zeroPad);
+                        displayString(intStrBuffer, &chars);
+                        break;
+                    }
+                    case 'l':
+                    {
+                        long integer = va_arg(list, long);
+                        __int_str(integer, intStrBuffer, base, plusSign, spaceNoSign, lengthSpec, leftJustify, zeroPad);
+                        displayString(intStrBuffer, &chars);
+                        break;
+                    }
+                    case 'q':
+                    {
+                        long long integer = va_arg(list, long long);
+                        __int_str(integer, intStrBuffer, base, plusSign, spaceNoSign, lengthSpec, leftJustify, zeroPad);
+                        displayString(intStrBuffer, &chars);
+                        break;
+                    }
+                    case 'j':
+                    {
+                        intmax_t integer = va_arg(list, intmax_t);
+                        __int_str(integer, intStrBuffer, base, plusSign, spaceNoSign, lengthSpec, leftJustify, zeroPad);
+                        displayString(intStrBuffer, &chars);
+                        break;
+                    }
+                    case 'z':
+                    {
+                        size_t integer = va_arg(list, size_t);
+                        __int_str(integer, intStrBuffer, base, plusSign, spaceNoSign, lengthSpec, leftJustify, zeroPad);
+                        displayString(intStrBuffer, &chars);
+                        break;
+                    }
+                    case 't':
+                    {
+                        ptrdiff_t integer = va_arg(list, ptrdiff_t);
+                        __int_str(integer, intStrBuffer, base, plusSign, spaceNoSign, lengthSpec, leftJustify, zeroPad);
+                        displayString(intStrBuffer, &chars);
+                        break;
+                    }
+                    default:
+                        break;
+                    }
+                    break;
+                }*/
+ 
+                case 'c':
+                {
+                    displayCharacter(va_arg(list, int), &chars);
+ 
+                    break;
+                }
+ 
+                case 's':
+                {
+                    displayString(va_arg(list, char*), &chars);
+                    break;
+                }
+ 
+                case 'n':
+                {
+                    switch (length) {
+                        case 'H':
+                            *(va_arg(list, signed char*)) = chars;
+                            break;
+                        case 'h':
+                            *(va_arg(list, short int*)) = chars;
+                            break;
+ 
+                        case 0: {
+                            int* a = va_arg(list, int*);
+                            *a = chars;
+                            break;
+                        }
+ 
+                        case 'l':
+                            *(va_arg(list, long*)) = chars;
+                            break;
+                        case 'q':
+                            *(va_arg(list, long long*)) = chars;
+                            break;
+                        case 'j':
+                            *(va_arg(list, intmax_t*)) = chars;
+                            break;
+                        case 'z':
+                            *(va_arg(list, size_t*)) = chars;
+                            break;
+                        case 't':
+                            *(va_arg(list, ptrdiff_t*)) = chars;
+                            break;
+                        default:
+                            break;
+                    }
+                    break;
+                }
+ 
+                case 'e':
+                case 'E':
+                    emode = true;
+ 
+                case 'f':
+                case 'F':
+                case 'g':
+                /*case 'G':
+                {
+                    double floating = va_arg(list, double);
+ 
+                    while (emode && floating >= 10) {
+                        floating /= 10;
+                        ++expo;
+                    }
+ 
+                    int form = lengthSpec - precSpec - expo - (precSpec || altForm ? 1 : 0);
+                    if (emode) {
+                        form -= 4;      // 'e+00'
+                    }
+                    if (form < 0) {
+                        form = 0;
+                    }
+ 
+                    __int_str(floating, intStrBuffer, base, plusSign, spaceNoSign, form, \
+                              leftJustify, zeroPad);
+ 
+                    displayString(intStrBuffer, &chars);
+ 
+                    floating -= (int) floating;
+ 
+                    for (int i = 0; i < precSpec; ++i) {
+                        floating *= 10;
+                    }
+                    intmax_t decPlaces = (intmax_t) (floating + 0.5);
+ 
+                    if (precSpec) {
+                        displayCharacter('.', &chars);
+                        __int_str(decPlaces, intStrBuffer, 10, false, false, 0, false, false);
+                        intStrBuffer[precSpec] = 0;
+                        displayString(intStrBuffer, &chars);
+                    } else if (altForm) {
+                        displayCharacter('.', &chars);
+                    }
+ 
+                    break;
+                }*/
+ 
+ 
+                case 'a':
+                case 'A':
+                    //ACK! Hexadecimal floating points...
+                    break;
+ 
+                default:
+                    break;
+            }
+ 
+            if (specifier == 'e') {
+                displayString("e+", &chars);
+            } else if (specifier == 'E') {
+                displayString("E+", &chars);
+            }
+ 
+            /*if (specifier == 'e' || specifier == 'E') {
+                __int_str(expo, intStrBuffer, 10, false, false, 2, false, true);
+                displayString(intStrBuffer, &chars);
+            }*/
+ 
+        } else {
+            displayCharacter(format[i], &chars);
+        }
+    }
+ 
+    return chars;
+}
+ 
+__attribute__ ((format (printf, 1, 2))) int printf (const char* format, ...)
+{
+    va_list list;
+    va_start (list, format);
+    int i = vprintf (format, list);
+    va_end (list);
+    return i;
+ 
+}
+
+void multiboot_init(multiboot_info_t* mbd, uint32_t magic)
+{
+	/* Make sure the magic number matches for memory mapping*/
+    if(magic != MULTIBOOT_BOOTLOADER_MAGIC) {
+		currentColor = color(RED,BLACK);
+        println("invalid magic number!");
+		currentColor = color(WHITE,BLACK);
+    }
+ 
+    /* Check bit 6 to see if we have a valid memory map */
+    if(!(mbd->flags >> 6 & 0x1)) {
+		currentColor = color(RED,BLACK);
+        println("invalid memory map given by GRUB bootloader");
+		currentColor = color(WHITE,BLACK);
+    }
+ 
+    /* Loop through the memory map and display the values */
+    int i;
+    for(i = 0; i < mbd->mmap_length; 
+        i += sizeof(multiboot_memory_map_t)) 
+    {
+        multiboot_memory_map_t* mmmt = 
+            (multiboot_memory_map_t*) (mbd->mmap_addr + i);
+ 
+        printf("Start Addr: %llu | Length: %llu | Size: %x | Type: %d\n",
+            mmmt->addr, mmmt->len, mmmt->size, mmmt->type);
+	}
+}
+
 void print_init()
 {
 	println("                          ********   *******    ********              ");
@@ -401,12 +1033,13 @@ void handle_keyboard_interrupt()
 	}
 }
 
-void kernel_main(void)
+void kernel_main(multiboot_info_t* mbd, uint32_t magic)
 {
 	enable_cursor(0,15);
 	currentColor = color(LIGHTGREEN,CYAN);
 	print_init();
 	currentColor = color(WHITE,BLACK);
+	multiboot_init(mbd,magic);
 	init_idt();
 	kb_init();
 	enable_interrupts();
